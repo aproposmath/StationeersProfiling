@@ -24,7 +24,7 @@ jobs:
 
       - run: |
           for i in {1..8}; do
-            steamcmd +login anonymous +sDepotDownloadFileFilter "*.dll" +app_update 600760 validate +quit && break
+            steamcmd +login anonymous +sDepotDownloadFileFilter "*.dll" +app_update 600760 -beta beta validate +quit && break
             echo "SteamCMD failed, retry #$i"
             sleep 10
           done
