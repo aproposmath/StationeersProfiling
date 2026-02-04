@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetadata xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ModId>aproposmath-stationeers-profiling</ModId>
+  <Name>CodeProfiling</Name>
+  <Author>aproposmath</Author>
+  <Version>0.0.1</Version>
+  <InGameDescription>
+    <![CDATA[
+    Mod to generate timings of any* C# game code function and show it along with the `debugthreads gametick` table.
+    How to use: Edit <GameFolder>/BepInEx/config/aproposmath-stationeers-profiling.cfg to add/enable/disable functions.
+    There are 20 slots for "function sets", each one has 4 settings:
+      - Enabled: if false, this set is ignored
+      - Names: comma separated list of function names like "Assets.Scripts.Objects.Electrical.ProgrammableChip.Execute", Namespaces are optional.
+      - Prefix = prepends this to all the given names above
+      - Suffix = appends this to all the given names above
+
+    Example (tracks some IC10 operations in all running chips, like "ProgrammableChip._ADD_Operation.Execute"):
+      Enabled = true
+      Names = ADD,MUL,SUB,DIV,SB,LB,SBN,LBN
+      Prefix = ProgrammableChip._
+      Suffix = _Operation.Execute
+
+    Limitations: 
+    - Currently only functions within Assembly-CSharp.dll (i.e. the core game, no mods) can be tracked.
+    - No timings for async functions (the number calls should still work)
+]]>
+  </InGameDescription>
+  <Tags>
+    <Tag>Modding</Tag>
+    <Tag>Code</Tag>
+  </Tags>
+</ModMetadata>
