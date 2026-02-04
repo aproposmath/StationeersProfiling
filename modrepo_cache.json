@@ -23,5 +23,19 @@
         "tag": [],
         "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
         "version": "0.0.1"
+    },
+    "sha256:fae725fbc09828fa41fcac78cc0fbdf5aa46b22d4ffb533db97ed3d8164a1c5e": {
+        "author": "aproposmath",
+        "branch": [],
+        "depends_on": [],
+        "digest": "sha256:fae725fbc09828fa41fcac78cc0fbdf5aa46b22d4ffb533db97ed3d8164a1c5e",
+        "id": "aproposmath-stationeers-profiling",
+        "name": "StationeersProfiler",
+        "tag": [
+            "Modding",
+            "Code"
+        ],
+        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
+        "version": "0.0.1"
     }
 }
