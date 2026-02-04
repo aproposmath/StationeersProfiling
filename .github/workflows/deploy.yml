@@ -72,7 +72,7 @@ jobs:
           cp -r About dist/$BASE_NAME/
 
           # 5) Create zip (DLL + About folder)
-          (cd dist/$BASE_NAME && zip -r "../$ZIP_NAME" $BASE_NAME)
+          (cd dist/$BASE_NAME && zip -r "../$ZIP_NAME" .)
 
           # 6) Expose zip path as output for later steps (e.g. upload to release)
           echo "zip_path=dist/$ZIP_NAME" >> "$GITHUB_OUTPUT"
