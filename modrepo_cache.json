@@ -1,34 +1,9 @@
 {
-    "sha256:4b44f7045d6885065b01cbef242aa1ef3cec86f5077cd508600925971fd19f5a": {
+    "sha256:5200fd91493c72e6db9d6014ad0de5d746e2eeaaacaef6ee956bc15fb5293391": {
         "author": "aproposmath",
         "branch": [],
         "depends_on": [],
-        "digest": "sha256:4b44f7045d6885065b01cbef242aa1ef3cec86f5077cd508600925971fd19f5a",
-        "id": "aproposmath-stationeers-profiling",
-        "name": "StationeersProfiler",
-        "tag": [
-            "Modding",
-            "Code"
-        ],
-        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
-        "version": "0.0.1"
-    },
-    "sha256:d18074ff48d5090dae629c258b19a195ce4f0a1fa105dc0692377f1d86b03c82": {
-        "author": "aproposmath",
-        "branch": [],
-        "depends_on": [],
-        "digest": "sha256:d18074ff48d5090dae629c258b19a195ce4f0a1fa105dc0692377f1d86b03c82",
-        "id": "aproposmath-stationeers-profiling",
-        "name": "StationeersProfiler",
-        "tag": [],
-        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
-        "version": "0.0.1"
-    },
-    "sha256:fae725fbc09828fa41fcac78cc0fbdf5aa46b22d4ffb533db97ed3d8164a1c5e": {
-        "author": "aproposmath",
-        "branch": [],
-        "depends_on": [],
-        "digest": "sha256:fae725fbc09828fa41fcac78cc0fbdf5aa46b22d4ffb533db97ed3d8164a1c5e",
+        "digest": "sha256:5200fd91493c72e6db9d6014ad0de5d746e2eeaaacaef6ee956bc15fb5293391",
         "id": "aproposmath-stationeers-profiling",
         "name": "StationeersProfiler",
         "tag": [
