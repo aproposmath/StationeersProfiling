@@ -1,21 +1,3 @@
-// Timing.cs
-// Thread-safe Harmony-based timing utility for Unity / Stationeers mods.
-//
-// Assumptions:
-// - Methods have no overloads.
-// - Method names are unique across the code you track.
-//
-// Design:
-// - At Track() time, each method is assigned an integer MethodId.
-// - Hot-path timing uses MethodId (int) in __state to avoid string/dictionary work.
-// - Aggregation is array-backed: _stats[methodId].
-// - Snapshot() stable-reads stats and also returns the associated method name.
-//
-// Notes:
-// - Thread safe for concurrent calls.
-// - Start()/Stop() toggles collection with a cheap volatile flag.
-// - Finalizer ensures time is recorded even when the target throws.
-
 #nullable enable
 
 using System;
@@ -25,7 +7,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using HarmonyLib;
-using Util.Commands;
 
 using UnityEngine;
 using ImGuiNET;
@@ -89,7 +70,7 @@ public static class Timing
     // without affecting other patches.
     private static Harmony _harmony = null;
 
-    public static void Track(MethodBase method)
+    public static void Track(MethodBase method, string nameSuffix = "")
     {
         if (method == null) throw new ArgumentNullException(nameof(method));
 
@@ -100,13 +81,12 @@ public static class Timing
         if (_harmony == null)
             _harmony = new Harmony("aproposmath-stationeers-profiling-timings");
 
-        // Assign MethodId now (also ensures arrays are grown before patch runs).
-        // Use DeclaringType + method name for clearer identification.
+        // Use class name + method name for clearer identification.
         var methodName = method.DeclaringType != null
             ? $"{method.DeclaringType.Name}.{method.Name}"
             : method.Name;
 
-        AssignMemory(method.MetadataToken, methodName);
+        AssignMemory(method.MetadataToken, methodName + nameSuffix);
 
         var h = _harmony;
 
@@ -117,7 +97,7 @@ public static class Timing
         h.Patch(method, prefix: prefix, postfix: postfix, finalizer: finalizer);
     }
 
-    /// <summary>Convenience overload: find and track by type + unique method name.</summary>
+    /// <summary>Convenience overload: find and track by type method name (will use all overloads).</summary>
     public static void Track(Type declaringType, string methodName)
     {
         if (declaringType == null) throw new ArgumentNullException(nameof(declaringType));
@@ -126,7 +106,8 @@ public static class Timing
         var bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
         var methods = declaringType.GetMethods(bf);
-        var found = false;
+
+        var matchingMethods = new List<MethodBase>();
 
         for (int i = 0; i < methods.Length; i++)
         {
@@ -134,12 +115,33 @@ public static class Timing
             if (m.Name != methodName)
                 continue;
 
-            found = true;
-            Track(m);
+            matchingMethods.Add(m);
         }
 
-        if (!found)
+        if (matchingMethods.Count == 0)
             throw new MissingMethodException(declaringType.FullName, methodName);
+
+        foreach (var m in matchingMethods)
+        {
+            string suffix = "";
+            if (matchingMethods.Count > 1)
+            {
+                var parameters = m.GetParameters();
+                if (parameters.Length == 0)
+                {
+                    suffix = "()";
+                }
+                else
+                {
+                    var parts = new string[parameters.Length];
+                    for (int pi = 0; pi < parameters.Length; pi++)
+                        parts[pi] = parameters[pi].ParameterType.Name;
+
+                    suffix = $"({string.Join(", ", parts)})";
+                }
+            }
+            Track(m, suffix);
+        }
     }
 
     public static void SaveSnapshot()
