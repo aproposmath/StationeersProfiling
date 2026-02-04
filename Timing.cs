@@ -31,10 +31,8 @@ using UnityEngine;
 using ImGuiNET;
 using Assets.Scripts;
 using Assets.Scripts.UI.ImGuiUi;
-using Assets.Scripts.GridSystem;
-using Assets.Scripts.Atmospherics;
 
-namespace StationeersPrivatePatches;
+namespace StationeersProfiling;
 
 public readonly struct StatSnapshot
 {
@@ -46,7 +44,7 @@ public readonly struct StatSnapshot
     public readonly double TotalMilliseconds;
     public readonly double MaxMilliseconds;
     public readonly int Exceptions;
-    
+
     public float MaxMicroseconds => (float)MaxMilliseconds * 1000;
     public float AvgMicroseconds => (float)TotalMilliseconds * 1000;
 
@@ -70,39 +68,27 @@ public readonly struct StatSnapshot
 
 public static class Timing
 {
-    // ---------------------------------
-    // Public API
-    // ---------------------------------
     public static List<StatSnapshot> LastSnapshot = [];
 
-    /// <summary>Enable timing collection. Patches still run but do almost no work when disabled.</summary>
     public static void Start() => Volatile.Write(ref _enabled, 1);
 
-    /// <summary>
-    /// Disable timing collection, wait one second for in-flight calls to finish, then print a snapshot of all timings.
-    /// </summary>
     public static void Stop()
     {
         if (Volatile.Read(ref _enabled) == 0)
             return;
+
         Volatile.Write(ref _enabled, 0);
 
-        // Give in-flight calls a moment to complete so they can still record timings.
-        // await Cysharp.Threading.Tasks.UniTask.Delay(100);
-
         if (ImGuiProfiler.Enabled)
-            AddDebugTimes();
-        // PrintSnapshot();
+            SaveSnapshot();
     }
 
     public static bool IsEnabled => Volatile.Read(ref _enabled) != 0;
 
-    /// <summary>
-    /// Patch a specific method. Assigns a MethodId at track time so the hot path doesn't need lookups.
-    /// </summary>
-
+    // separate from the plugin Harmony instance to allow unpatching on config changes
+    // without affecting other patches.
     private static Harmony _harmony = null;
-    
+
     public static void Track(MethodBase method)
     {
         if (method == null) throw new ArgumentNullException(nameof(method));
@@ -110,16 +96,17 @@ public static class Timing
         // Avoid double patching.
         if (!_tracked.TryAdd(method, 0))
             return;
-            
-        if(_harmony == null)
-            _harmony = new Harmony("stationeers.private.patches.timings");
+
+        if (_harmony == null)
+            _harmony = new Harmony("aproposmath-stationeers-profiling-timings");
 
         // Assign MethodId now (also ensures arrays are grown before patch runs).
         // Use DeclaringType + method name for clearer identification.
         var methodName = method.DeclaringType != null
             ? $"{method.DeclaringType.Name}.{method.Name}"
             : method.Name;
-        var methodId = GetOrCreateMethodId(method.MetadataToken, methodName);
+
+        AssignMemory(method.MetadataToken, methodName);
 
         var h = _harmony;
 
@@ -137,33 +124,33 @@ public static class Timing
         if (string.IsNullOrWhiteSpace(methodName)) throw new ArgumentException("Method name is required.", nameof(methodName));
 
         var bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-        var mb = declaringType.GetMethod(methodName, bf);
-        if (mb == null)
-            throw new MissingMethodException(declaringType.FullName, methodName);
 
-        Track(mb);
+        var methods = declaringType.GetMethods(bf);
+        var found = false;
+
+        for (int i = 0; i < methods.Length; i++)
+        {
+            var m = methods[i];
+            if (m.Name != methodName)
+                continue;
+
+            found = true;
+            Track(m);
+        }
+
+        if (!found)
+            throw new MissingMethodException(declaringType.FullName, methodName);
     }
 
-    /// <summary>
-    /// Returns a point-in-time snapshot of the aggregated timings.
-    /// Safe to call while timings are being collected.
-    /// </summary>
-    public static IReadOnlyList<StatSnapshot> Snapshot()
+    public static void SaveSnapshot()
     {
         // Snapshot uses the stable method name list length as the authoritative range.
-        var names = Volatile.Read(ref _methodNames);
-        var stats = Volatile.Read(ref _stats);
-
-        var n = names.Length;
+        var n = MethodNames.Count;
         var list = new List<StatSnapshot>(n);
 
         for (int id = 0; id < n; id++)
         {
-            // stats array should be at least as large as names array; be defensive.
-            if (id >= stats.Length)
-                break;
-
-            var s = stats[id];
+            var s = Stats[id];
             if (s == null)
                 continue;
 
@@ -174,7 +161,7 @@ public static class Timing
 
             list.Add(new StatSnapshot(
                 methodId: id,
-                methodName: names[id],
+                methodName: MethodNames[id],
                 calls: calls,
                 totalTicks: totalTicks,
                 maxTicks: maxTicks,
@@ -187,26 +174,22 @@ public static class Timing
         // Most useful ordering: total time descending.
         list.Sort((a, b) => b.TotalTicks.CompareTo(a.TotalTicks));
         LastSnapshot = list;
-        return list;
+        ResetStats();
     }
 
-    /// <summary>Clears collected stats (does not unpatch and does not clear MethodId assignments).</summary>
-    public static void Reset()
+    public static void ResetStats()
     {
-        var stats = Volatile.Read(ref _stats);
-        for (int i = 0; i < stats.Length; i++)
-        {
-            stats[i]?.Reset();
-        }
+        for (int i = 0; i < Stats.Count; i++)
+            Stats[i]?.Reset();
     }
 
-    public static void Clear() {
-        if(_harmony != null)
-            _harmony.UnpatchSelf();
+    public static void Clear()
+    {
+        _harmony?.UnpatchSelf();
         _tracked.Clear();
         _methodTokenToId.Clear();
-        _methodNames = Array.Empty<string>();
-        _stats = Array.Empty<Stat?>();
+        MethodNames.Clear();
+        Stats.Clear();
     }
 
     private static void TimingPrefix(MethodBase __originalMethod, ref CallState __state)
@@ -216,7 +199,7 @@ public static class Timing
             __state = default;
             return;
         }
-        
+
         var id = _methodTokenToId[__originalMethod.MetadataToken];
         __state = new CallState(id, Stopwatch.GetTimestamp(), started: true);
     }
@@ -236,7 +219,7 @@ public static class Timing
 
         return __exception;
     }
-    
+
     // ---------------------------------
     // Internal implementation
     // ---------------------------------
@@ -246,45 +229,18 @@ public static class Timing
     private static readonly ConcurrentDictionary<MethodBase, byte> _tracked = new ConcurrentDictionary<MethodBase, byte>();
     private static readonly ConcurrentDictionary<int, int> _methodTokenToId = new ConcurrentDictionary<int, int>();
 
-    // Array-backed storage. Only grown under _resizeLock.
-    // MethodId is an index into both arrays.
-    private static readonly object _resizeLock = new object();
-    private static string[] _methodNames = Array.Empty<string>();
-    private static Stat?[] _stats = Array.Empty<Stat?>();
-    
-    private static int GetOrCreateMethodId(int methodToken, string methodName)
+    private static readonly List<string> MethodNames = new(1024);
+    private static readonly List<Stat?> Stats = new(1024);
+
+    private static void AssignMemory(int methodToken, string methodName)
     {
-        // Fast path: already registered.
-        if (_methodTokenToId.TryGetValue(methodToken, out var existing))
-            return existing;
+        if (_methodTokenToId.ContainsKey(methodToken))
+            return;
+        var id = MethodNames.Count;
 
-        // Slow path: allocate a new id and grow arrays under lock.
-        lock (_resizeLock)
-        {
-            if (_methodTokenToId.TryGetValue(methodToken, out existing))
-                return existing;
-
-            var id = _methodNames.Length;
-
-            // grow names
-            var newNames = new string[id + 1];
-            Array.Copy(_methodNames, newNames, _methodNames.Length);
-            newNames[id] = methodName;
-
-            // grow stats
-            var newStats = new Stat?[id + 1];
-            Array.Copy(_stats, newStats, _stats.Length);
-            newStats[id] = new Stat();
-
-            // publish arrays
-            Volatile.Write(ref _methodNames, newNames);
-            Volatile.Write(ref _stats, newStats);
-
-            // publish mapping
-            _methodTokenToId[methodToken] = id;
-
-            return id;
-        }
+        MethodNames.Add(methodName);
+        Stats.Add(new Stat());
+        _methodTokenToId[methodToken] = id;
     }
 
     private static void Finish(int methodId, long startTimestamp, bool hasException)
@@ -293,46 +249,15 @@ public static class Timing
         var delta = end - startTimestamp;
         if (delta < 0) delta = 0;
 
-        var stats = Volatile.Read(ref _stats);
-        if ((uint)methodId >= (uint)stats.Length)
+        if (methodId >= Stats.Count)
             return;
 
-        var stat = stats[methodId];
+        var stat = Stats[methodId];
         stat?.Add(delta, hasException);
     }
 
-    private static void AddDebugTimes()
-    {
-        var times = ImGuiProfiler._debugLines;
-        var snapshot = Snapshot();
-        /* 
-        for (int i = 0; i < snapshot.Count; i++)
-        {
-            var s = snapshot[i];
-            var avgMs = s.Calls > 0 ? (s.TotalMilliseconds / s.Calls) : 0.0;
-            var key = " " + s.MethodName;
-
-            if (!times.TryGetValue(key, out var value))
-            {
-                value = new DebugLine();
-                times.Add(key, value);
-            }
-            value.Set((long)s.TotalMilliseconds);
-
-            // L.Debug(
-            //     $"{i + 1,3}. [{s.MethodId}] {s.MethodName.PadRight(40, ' ')}  calls={s.Calls.ToString().PadLeft(6, ' ')}  totalMs={s.TotalMilliseconds:F3}  avgMs={avgMs:F6}  maxMs={s.MaxMilliseconds:F3}"
-            // );
-        }
-        */
-        Reset();
-    }
-
     private static double TicksToMilliseconds(long stopwatchTicks)
-        => (stopwatchTicks * 1000.0) / Stopwatch.Frequency;
-
-    // ---------------------------------
-    // Data structures
-    // ---------------------------------
+        => stopwatchTicks * 1000.0 / Stopwatch.Frequency;
 
     private sealed class Stat
     {
@@ -345,7 +270,7 @@ public static class Timing
         {
             Interlocked.Increment(ref Calls);
             Interlocked.Add(ref TotalTicks, deltaTicks);
-            if(hasException)
+            if (hasException)
                 Interlocked.Increment(ref NumExceptions);
 
             long current;
@@ -372,7 +297,7 @@ public static class Timing
         public readonly bool Started;
         public readonly bool HasException;
 
-        public CallState(int methodId, long startTimestamp, bool started, bool hasException=false)
+        public CallState(int methodId, long startTimestamp, bool started, bool hasException = false)
         {
             MethodId = methodId;
             StartTimestamp = startTimestamp;
@@ -382,26 +307,11 @@ public static class Timing
     }
 }
 
-class TimingCommand : CommandBase
-{
-    public override string HelpText => "timing";
-
-    public override string[] Arguments { get; } = new string[] { };
-
-    public override bool IsLaunchCmd { get; }
-
-    public override string Execute(string[] args)
-    {
-        Timing.Start();
-        return "timing started";
-    }
-}
-
 [HarmonyPatch]
 public static class TimingPatches
 {
-    static int i = 0;
-    static Dictionary<long, Atmosphere> lookup = new Dictionary<long, Atmosphere>(65536);
+    static bool ShowVanillaTable = true;
+    static bool EnableInputs = false;
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
     [HarmonyPatch(nameof(ImGuiProfiler.Begin))]
@@ -421,30 +331,40 @@ public static class TimingPatches
         Timing.Stop();
     }
 
-    [HarmonyPatch(typeof(AtmosphericsManager))]
-    [HarmonyPatch(nameof(AtmosphericsManager.Find))]
-    [HarmonyPrefix]
-    static bool FindPrefix(ref Atmosphere __result, ref WorldGrid worldGrid)
-    {
-        return true;
-        if (lookup.Count == 0)
-            return true;
-
-        var g = worldGrid.Value;
-        long index = ((long)g.x << 42) + ((long)g.y << 21) + (long)g.z;
-        lock (AtmosphericsManager.AllWorldAtmospheresLookUp)
-        {
-            if (lookup.TryGetValue(index, out __result))
-                return false;
-        }
-        return true;
-    }
-
     [HarmonyPatch(typeof(ImGuiProfiler))]
     [HarmonyPatch(nameof(ImGuiProfiler.Draw))]
     [HarmonyPrefix]
     private static bool ImGuiProfilerDraw()
     {
+        ImGui.Begin("Stationeers Profiler");
+        
+        ImGui.Checkbox("Show Vanilla Table", ref ShowVanillaTable);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("    ");
+        ImGui.SameLine();
+        
+        if(EnableInputs)
+            CursorManager.SetCursor(false);
+
+        if (ImGui.Checkbox("Capture inputs", ref EnableInputs) )
+        {
+            if (EnableInputs)
+            {
+                KeyManager.SetInputState("stationeersprofiler", KeyInputState.Typing);
+            }
+            else
+            {
+                CursorManager.SetCursor(true);
+                KeyManager.RemoveInputState("stationeersprofiler");
+            }
+        }
+        
+        
+        var FunctionSets = StationeersProfilingPlugin.FunctionSets;
+        for(int i =0; i < FunctionSets.Count; i++)
+            FunctionSets[i].DrawConfig(i+1);
+        ImGui.End();
+
         ImGui.Begin("ImGuiProfilerWindow", (ImGuiWindowFlags)799685);
         ImGui.SetWindowPos(Vector2.zero, ImGuiCond.Always);
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(10f, 0f));
@@ -484,31 +404,34 @@ public static class TimingPatches
         ImGui.EndTable();
         ImGui.NewLine();
 
-        if (ImGui.BeginTable("ImGuiProfilerTable", 3, (ImGuiTableFlags)10320))
+        if (ShowVanillaTable)
         {
-            ImGui.TableSetupColumn("Name");
-            ImGui.TableSetupColumn("Cur ms", 100f);
-            ImGui.TableSetupColumn("Avg ms", 100f);
-            ImGui.TableHeadersRow();
-
-            foreach (KeyValuePair<string, DebugLine> debugLine in ImGuiProfiler._debugLines)
+            if (ImGui.BeginTable("ImGuiProfilerTable", 3, (ImGuiTableFlags)10320))
             {
-                ImGui.TableNextRow();
-                ImGui.TableSetColumnIndex(0);
-                ImGui.TextUnformatted(debugLine.Key);
-                ImGui.TableSetColumnIndex(1);
-                ImGuiProfiler.DrawValue(debugLine.Value.GetCurrent(), "0.00");
-                ImGui.TableSetColumnIndex(2);
-                ImGuiProfiler.DrawValue(debugLine.Value.GetAverage(), "0.000");
-            }
+                ImGui.TableSetupColumn("Name");
+                ImGui.TableSetupColumn("Cur ms", 100f);
+                ImGui.TableSetupColumn("Avg ms", 100f);
+                ImGui.TableHeadersRow();
 
-            ImGui.EndTable();
+                foreach (KeyValuePair<string, DebugLine> debugLine in ImGuiProfiler._debugLines)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableSetColumnIndex(0);
+                    ImGui.TextUnformatted(debugLine.Key);
+                    ImGui.TableSetColumnIndex(1);
+                    ImGuiProfiler.DrawValue(debugLine.Value.GetCurrent(), "0.00");
+                    ImGui.TableSetColumnIndex(2);
+                    ImGuiProfiler.DrawValue(debugLine.Value.GetAverage(), "0.000");
+                }
+
+                ImGui.EndTable();
+            }
+            ImGui.PopStyleVar();
+            ImGui.PopStyleColor();
+            ImGui.PopStyleColor();
+            ImGui.End();
         }
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor();
-        ImGui.PopStyleColor();
-        ImGui.End();
-        PrivatePatchesPlugin.Instance.CheckConfig();
+        StationeersProfilingPlugin.Instance.CheckConfig();
         return false;
     }
 }

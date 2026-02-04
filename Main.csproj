@@ -4,8 +4,8 @@
   <PropertyGroup>
     <MSBuildVerbosity>normal</MSBuildVerbosity>
     <TargetFramework>net48</TargetFramework>
-    <AssemblyName>ExampleMod</AssemblyName>
-    <Description>Example code-only mod for Stationeers</Description>
+    <AssemblyName>StationeersProfiling</AssemblyName>
+    <Description>Profiling Tool for Stationeers</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
@@ -51,13 +51,9 @@
       <HintPath>$(StationeersDllDir)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>$(StationeersDllDir)/Assembly-CSharp.dll</HintPath>
+    <Reference Include="RG.ImGui">
+      <HintPath>$(StationeersDllDir)/RG.ImGui.dll</HintPath>
       <Private>false</Private>
-    </Reference>
-    <Reference Include="StationeersMods.Interface">
-      <HintPath>$(StationeersDllDir)/../../BepInEx/plugins/StationeersLaunchPad/StationeersMods.Interface.dll</HintPath>
-      <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">

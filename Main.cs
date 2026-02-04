@@ -1,7 +1,6 @@
-namespace StationeersPrivatePatches;
+namespace StationeersProfiling;
 
 using BepInEx.Configuration;
-using Assets.Scripts.Objects.Items;
 using Assets.Scripts.Objects.Electrical;
 using System;
 using BepInEx;
@@ -9,65 +8,11 @@ using HarmonyLib;
 using System.Collections.Generic;
 using System.Linq;
 using Util.Commands;
+using ImGuiNET;
+using UnityEngine;
+using System.Diagnostics;
 
-class L
-{
-    private static BepInEx.Logging.ManualLogSource _logger;
-
-    public static void SetLogger(BepInEx.Logging.ManualLogSource logger)
-    {
-        _logger = logger;
-    }
-
-    public static void Debug(string message)
-    {
-        _logger?.LogDebug(message);
-    }
-
-    public static void Log(string message)
-    {
-        _logger?.LogInfo(message);
-    }
-
-    public static void Info(string message)
-    {
-        _logger?.LogInfo(message);
-    }
-
-    public static void Error(string message)
-    {
-        _logger?.LogError(message);
-    }
-
-    public static void Warning(string message)
-    {
-        _logger?.LogWarning(message);
-    }
-
-}
-
-class AproCommand : CommandBase
-{
-    public override string HelpText => "apro <command>";
-
-    public override string[] Arguments { get; } = new string[] { };
-
-    public override bool IsLaunchCmd { get; }
-
-    public override string Execute(string[] args)
-    {
-        L.Info("apro command executed");
-        foreach (Ore ore in Ore.AllOrePrefabs)
-        {
-            L.Info($"Ore prefab: {ore.name}");
-            foreach (var gas in ore.SpawnContents)
-            {
-                L.Info($"  contains gas: {gas.ToString()} at {gas.Kelvin}K / {gas.Kelvin - 273.15f}C");
-            }
-        }
-        return "done";
-    }
-}
+using Cysharp.Threading.Tasks;
 
 public class FunctionSet
 {
@@ -75,7 +20,7 @@ public class FunctionSet
     public ConfigEntry<string> Prefix;
     public ConfigEntry<string> Suffix;
     public ConfigEntry<string> Names;
-    
+
     public FunctionSet(ConfigFile config, int index)
     {
         string section = "Set_" + index.ToString().PadLeft(2, '0');
@@ -83,12 +28,12 @@ public class FunctionSet
         string prefix = "";
         string suffix = "";
         string names = "";
-        if(index==0)
+        if (index == 0)
         {
             description = "Defines a set of functions to track, use multiple names separated by commas, the names will be prefixed and suffixed with the Prefix and Suffix values.";
             names = "ProgrammableChip.Execute";
         }
-        if(index==1)
+        if (index == 1)
         {
             prefix = "ProgrammableChip._";
             suffix = "_Operation.Execute";
@@ -99,48 +44,108 @@ public class FunctionSet
         Prefix = config.Bind(section, "Prefix", prefix);
         Suffix = config.Bind(section, "Suffix", suffix);
     }
-    
+
     public List<string> FunctionNames
     {
         get
         {
             List<string> res = new List<string>();
-            if(!Enabled.Value)
+            if (!Enabled.Value)
                 return res;
             var prefix = Prefix.Value.Trim();
             var suffix = Suffix.Value.Trim();
             foreach (var name in Names.Value.Split(','))
-                if(!string.IsNullOrWhiteSpace(name))
+                if (!string.IsNullOrWhiteSpace(name))
                     res.Add($"{prefix}{name.Trim()}{suffix}");
             return res;
         }
     }
+
+    public void DrawConfig(int index)
+    {
+        ImGui.Separator();
+
+        var style = ImGui.GetStyle();
+
+        ImGui.PushID(index);
+
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 6f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(style.FramePadding.x, style.FramePadding.y + 2f));
+        ImGui.BeginGroup();
+
+        bool enabled = Enabled.Value;
+        if (ImGui.Checkbox("", ref enabled))
+            Enabled.Value = enabled;
+
+        ImGui.SameLine();
+
+        ImGui.TextUnformatted($"Function Set {index:D2}");
+
+        ImGui.TextUnformatted("Names:");
+        string namesVal = Names.Value ?? "";
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.InputTextMultiline($"##Names{index}", ref namesVal, 8192, new Vector2(0, ImGui.GetTextLineHeight() * 3.5f)))
+            Names.Value = namesVal;
+
+        ImGui.TextUnformatted("Prefix:");
+        ImGui.SameLine();
+        string prefixVal = Prefix.Value ?? "";
+        ImGui.SetNextItemWidth(220f);
+        if (ImGui.InputText("##Prefix", ref prefixVal, 2048))
+            Prefix.Value = prefixVal;
+
+        ImGui.SameLine();
+        ImGui.TextUnformatted("    Suffix:");
+        ImGui.SameLine();
+        string suffixVal = Suffix.Value ?? "";
+        ImGui.SetNextItemWidth(220f);
+        if (ImGui.InputText("##Suffix", ref suffixVal, 2048))
+            Suffix.Value = suffixVal;
+
+        ImGui.EndGroup();
+
+        ImGui.PopStyleVar(2);
+        ImGui.PopID();
+    }
 }
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-public class PrivatePatchesPlugin : BaseUnityPlugin
+public class StationeersProfilingPlugin : BaseUnityPlugin
 {
-    public const string PluginGuid = "aproposmath-stationeers-private-pathes";
-    public const string PluginName = "Stationeers Private Patches";
-    public const string PluginVersion = VersionInfo.Version;
+    public const string PluginGuid = "aproposmath-stationeers-profiling";
+    public const string PluginName = ThisAssembly.AssemblyName;
+    public const string PluginVersion = ThisAssembly.AssemblyVersion;
+    public const string PluginLongVersion = ThisAssembly.AssemblyInformationalVersion;
     public static Harmony _harmony;
-    public static PrivatePatchesPlugin Instance = null;
+    public static StationeersProfilingPlugin Instance = null;
 
     public static List<FunctionSet> FunctionSets;
 
     private bool HasConfigChanged = false;
+    private long HasConfigChangedTick = 0;
     public const int N_FUNCTION_SETS = 20;
+
+    private async UniTaskVoid OnConfigChanged()
+    {
+        var sw = new Stopwatch();
+        long tick = sw.ElapsedTicks;
+        HasConfigChangedTick = tick;
+        await UniTask.Delay(1000);
+        if (HasConfigChangedTick == tick)
+            HasConfigChanged = true;
+    }
 
     private void BindAllConfigs()
     {
         FunctionSets = [];
-        for(int i =0; i< N_FUNCTION_SETS; i++) {
+        for (int i = 0; i < N_FUNCTION_SETS; i++)
+        {
             FunctionSets.Add(new FunctionSet(Config, i));
         }
-        
-        Config.SettingChanged += (val, ev) => {
-            // triggers call to Init when the current gametick is done
-            HasConfigChanged = true;
+
+        Config.SettingChanged += (val, ev) =>
+        {
+            OnConfigChanged().Forget();
         };
     }
 
@@ -194,7 +199,7 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
 
                     if (sep <= 0 || sep >= trimmed.Length - 1)
                     {
-                        L.Warning($"TrackFunctions entry '{trimmed}' is not in the form 'Type.Method' or 'Namespace.Type.Method' - skipping");
+                        this.Logger.LogWarning($"TrackFunctions entry '{trimmed}' is not in the form 'Type.Method' or 'Namespace.Type.Method' - skipping");
                         continue;
                     }
 
@@ -203,7 +208,7 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
 
                     if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(methodName))
                     {
-                        L.Warning($"TrackFunctions entry '{trimmed}' has empty type or method - skipping");
+                        this.Logger.LogWarning($"TrackFunctions entry '{trimmed}' has empty type or method - skipping");
                         continue;
                     }
 
@@ -227,7 +232,7 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
 
                     if (resolvedType == null)
                     {
-                        L.Warning($"Could not resolve type for '{trimmed}' (type '{typeName}') - skipping");
+                        this.Logger.LogWarning($"Could not resolve type for '{trimmed}' (type '{typeName}') - skipping");
                         continue;
                     }
 
@@ -239,16 +244,16 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
 
                     if (!hasMethod)
                     {
-                        L.Warning($"Resolved type '{resolvedType.FullName}' but could not find method '{methodName}' for '{trimmed}' - skipping");
+                        this.Logger.LogWarning($"Resolved type '{resolvedType.FullName}' but could not find method '{methodName}' for '{trimmed}' - skipping");
                         continue;
                     }
 
-                    L.Info($"Timing {resolvedType.FullName}.{methodName}");
+                    this.Logger.LogInfo($"Timing {resolvedType.FullName}.{methodName}");
                     Timing.Track(resolvedType, methodName);
                 }
                 catch (Exception ex)
                 {
-                    L.Error($"Failed to process timing function entry '{func}': {ex}");
+                    this.Logger.LogError($"Failed to process timing function entry '{func}': {ex}");
                 }
             }
         }
@@ -261,9 +266,8 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
         try
         {
             Instance = this;
-            L.SetLogger(this.Logger);
             this.Logger.LogInfo(
-                $"Awake ${PluginName} {VersionInfo.VersionGit}, build time {VersionInfo.BuildTime}");
+                $"Awake ${PluginName} {PluginLongVersion}");
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
@@ -273,7 +277,7 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
         }
         catch (Exception ex)
         {
-            this.Logger.LogError($"Error during ${PluginName} {VersionInfo.VersionGit} init: {ex}");
+            this.Logger.LogError($"Error during ${PluginName} {PluginLongVersion} init: {ex}");
         }
     }
 
@@ -281,7 +285,7 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
     {
         try
         {
-            L.Info($"OnDestroy ${PluginName} {VersionInfo.VersionGit}");
+            this.Logger.LogInfo($"OnDestroy ${PluginName} {PluginLongVersion}");
             // CutScenePatches.CleanupPrefabs();
             if (_harmony == null)
                 return;
@@ -296,6 +300,8 @@ public class PrivatePatchesPlugin : BaseUnityPlugin
     }
 
 
+    // hard-coded list of all namespaces in the Stationeers source code, 
+    // in case a function name is not found, try prefixing with one of these
     static List<string> Namespaces = new List<string> {
         "Assets.Features.AtmosphericScattering.Code",
         "Assets.Scripts",
