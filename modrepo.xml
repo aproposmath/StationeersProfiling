@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModRepo>
-  <ModVersion ModID="aproposmath-stationeers-profiling" Version="0.0.1" Name="StationeersProfiler" Author="aproposmath" Url="https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip" Digest="0c6396fc1269f46ec8aa87232ceef9b2339a3d19356df171d28590cba36456a8">
-    <Branch Value="" />
-  </ModVersion>
+  <ModVersion ModID="aproposmath-stationeers-profiling" Version="0.0.1" Name="StationeersProfiler" Author="aproposmath" Url="https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip" Digest="sha256:d18074ff48d5090dae629c258b19a195ce4f0a1fa105dc0692377f1d86b03c82" />
 </ModRepo>
