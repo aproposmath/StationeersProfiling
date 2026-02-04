@@ -81,26 +81,26 @@ public class FunctionSet
 
         ImGui.TextUnformatted($"Function Set {index:D2}");
 
-        ImGui.TextUnformatted("Names:");
-        string namesVal = Names.Value ?? "";
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextMultiline($"##Names{index}", ref namesVal, 8192, new Vector2(0, ImGui.GetTextLineHeight() * 3.5f)))
-            Names.Value = namesVal;
-
         ImGui.TextUnformatted("Prefix:");
         ImGui.SameLine();
         string prefixVal = Prefix.Value ?? "";
-        ImGui.SetNextItemWidth(220f);
+        ImGui.SetNextItemWidth(270f);
         if (ImGui.InputText("##Prefix", ref prefixVal, 2048))
             Prefix.Value = prefixVal;
 
         ImGui.SameLine();
-        ImGui.TextUnformatted("    Suffix:");
+        ImGui.TextUnformatted(" Suffix:");
         ImGui.SameLine();
         string suffixVal = Suffix.Value ?? "";
-        ImGui.SetNextItemWidth(220f);
+        ImGui.SetNextItemWidth(270f);
         if (ImGui.InputText("##Suffix", ref suffixVal, 2048))
             Suffix.Value = suffixVal;
+
+        // ImGui.TextUnformatted("Names:");
+        string namesVal = Names.Value ?? "";
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.InputTextMultiline($"##Names{index}", ref namesVal, 8192, new Vector2(0, ImGui.GetTextLineHeight() * 2.5f)))
+            Names.Value = namesVal;
 
         ImGui.EndGroup();
 
