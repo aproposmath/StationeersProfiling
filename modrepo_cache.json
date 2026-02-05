@@ -1,9 +1,9 @@
 {
-    "sha256:5200fd91493c72e6db9d6014ad0de5d746e2eeaaacaef6ee956bc15fb5293391": {
+    "sha256:4493e006ae7818ce1858646ba75434d6addb8c4fa3302109a6698bddfb053a67": {
         "author": "aproposmath",
         "branch": [],
         "depends_on": [],
-        "digest": "sha256:5200fd91493c72e6db9d6014ad0de5d746e2eeaaacaef6ee956bc15fb5293391",
+        "digest": "sha256:4493e006ae7818ce1858646ba75434d6addb8c4fa3302109a6698bddfb053a67",
         "id": "aproposmath-stationeers-profiling",
         "name": "StationeersProfiler",
         "tag": [
