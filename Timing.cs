@@ -5,7 +5,9 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Threading;
+using System.Linq;
 using HarmonyLib;
 
 using UnityEngine;
@@ -17,39 +19,43 @@ namespace StationeersProfiling;
 
 public readonly struct StatSnapshot
 {
-    public readonly int MethodId;
     public readonly string MethodName;
-    public readonly long Calls;
-    public readonly long TotalTicks;
-    public readonly long MaxTicks;
-    public readonly double TotalMilliseconds;
-    public readonly double MaxMilliseconds;
-    public readonly int Exceptions;
+    public readonly float[] values;
 
-    public float MaxMicroseconds => (float)MaxMilliseconds * 1000;
-    public float AvgMicroseconds => (float)TotalMilliseconds * 1000;
-
-    public StatSnapshot(int methodId, string methodName, long calls, long totalTicks, long maxTicks, double totalMilliseconds, double maxMilliseconds, int exceptions)
+    public StatSnapshot(string methodName, float calls, long totalTicks, long maxTicks, int exceptions)
     {
-        MethodId = methodId;
         MethodName = methodName;
-        Calls = calls;
-        TotalTicks = totalTicks;
-        MaxTicks = maxTicks;
-        TotalMilliseconds = totalMilliseconds;
-        MaxMilliseconds = maxMilliseconds;
-        Exceptions = exceptions;
+
+        var totalMilliseconds = (float)(totalTicks * 1000.0 / Stopwatch.Frequency);
+        var maxMicroseconds = (float)(maxTicks * 1_000_000.0 / Stopwatch.Frequency);
+        var avgMicroseconds = calls > 0f
+            ? (float)(totalTicks * 1_000_000.0 / Stopwatch.Frequency / calls)
+            : 0f;
+
+        values = new float[5];
+        values[0] = calls;
+        values[1] = totalMilliseconds;
+        values[2] = avgMicroseconds;
+        values[3] = maxMicroseconds;
+        values[4] = exceptions;
     }
 
+    public float Calls => values[0];
+    public float TotalMilliseconds => values[1];
+    public float AvgMicroseconds => values[2];
+    public float MaxMicroseconds => values[3];
+    public float Exceptions => values[4];
+
     public override string ToString()
-        => $"[{MethodId}] {MethodName} calls={Calls} totalMs={TotalMilliseconds:F3} maxMs={MaxMilliseconds:F3}";
-
+        => $"{MethodName} calls={Calls} totalMs={TotalMilliseconds:F3} maxUs={MaxMicroseconds:F0}";
 }
-
 
 public static class Timing
 {
     public static List<StatSnapshot> LastSnapshot = [];
+    public static bool needsSorting = false;
+    public static int sortIndex = 0;
+    public static ImGuiSortDirection sortDirection = ImGuiSortDirection.None;
 
     public static void Start() => Volatile.Write(ref _enabled, 1);
 
@@ -162,21 +168,36 @@ public static class Timing
             var exceptions = Volatile.Read(ref s.NumExceptions);
 
             list.Add(new StatSnapshot(
-                methodId: id,
                 methodName: MethodNames[id],
                 calls: calls,
                 totalTicks: totalTicks,
                 maxTicks: maxTicks,
-                totalMilliseconds: TicksToMilliseconds(totalTicks),
-                maxMilliseconds: TicksToMilliseconds(maxTicks),
                 exceptions: exceptions
             ));
         }
 
-        // Most useful ordering: total time descending.
-        list.Sort((a, b) => b.TotalTicks.CompareTo(a.TotalTicks));
         LastSnapshot = list;
+        needsSorting = true;
         ResetStats();
+    }
+
+    public static List<StatSnapshot> SortLastSnapshot()
+    {
+        if (!needsSorting)
+            return LastSnapshot;
+        if (sortIndex == 0)
+        {
+            LastSnapshot = sortDirection == ImGuiSortDirection.Ascending
+                ? LastSnapshot.OrderBy(s => s.MethodName).ToList()
+                : LastSnapshot.OrderByDescending(s => s.MethodName).ToList();
+        }
+        if (sortIndex >= 1 && sortIndex <= 5)
+        {
+            float factor = sortDirection == ImGuiSortDirection.Ascending ? 1.0f : -1.0f;
+            LastSnapshot = LastSnapshot.OrderBy(s => factor * s.values[sortIndex - 1]).ToList();
+        }
+        needsSorting = false;
+        return LastSnapshot;
     }
 
     public static void ResetStats()
@@ -307,12 +328,69 @@ public static class Timing
             HasException = hasException;
         }
     }
+
+    public static void DrawTimings()
+    {
+        if (!ImGui.BeginTabItem("Custom"))
+            return;
+
+        if (ImGui.BeginTable("ImGuiProfilerTable", 6,
+            ImGuiTableFlags.Sortable |
+              ImGuiTableFlags.RowBg))
+        {
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.DefaultSort, 500f);
+            ImGui.TableSetupColumn("Calls", ImGuiTableColumnFlags.PreferSortDescending, 100f);
+            ImGui.TableSetupColumn("Avg us", ImGuiTableColumnFlags.PreferSortDescending, 100f);
+            ImGui.TableSetupColumn("Max us", ImGuiTableColumnFlags.PreferSortDescending, 100f);
+            ImGui.TableSetupColumn("Total ms", ImGuiTableColumnFlags.PreferSortDescending, 100f);
+            ImGui.TableSetupColumn("Exceptions", ImGuiTableColumnFlags.PreferSortDescending, 150f);
+            ImGui.TableHeadersRow();
+
+            var sortSpecs = ImGui.TableGetSortSpecs();
+
+            unsafe
+            {
+                if (sortSpecs.NativePtr != null && sortSpecs.SpecsDirty)
+                {
+                    var spec = sortSpecs.Specs;
+                    needsSorting = true;
+                    sortIndex = spec.ColumnIndex;
+                    sortDirection = spec.SortDirection;
+                    sortSpecs.SpecsDirty = false;
+                }
+            }
+
+
+            var snapshot = SortLastSnapshot();
+
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                var s = snapshot[i];
+                ImGui.TableNextRow();
+                ImGui.TableSetColumnIndex(0);
+                ImGui.TextUnformatted(s.MethodName);
+                ImGui.TableSetColumnIndex(1);
+                ImGuiProfiler.DrawValue(s.Calls, "0");
+                ImGui.TableSetColumnIndex(2);
+                ImGuiProfiler.DrawValue(s.TotalMilliseconds, "0.0");
+                ImGui.TableSetColumnIndex(3);
+                ImGuiProfiler.DrawValue(s.AvgMicroseconds, "0");
+                ImGui.TableSetColumnIndex(4);
+                ImGuiProfiler.DrawValue(s.MaxMicroseconds, "0");
+                ImGui.TableSetColumnIndex(5);
+                ImGuiProfiler.DrawValue(s.Exceptions, "0");
+            }
+        }
+
+        ImGui.EndTable();
+        ImGui.EndTabItem();
+    }
+
 }
 
 [HarmonyPatch]
 public static class TimingPatches
 {
-    static bool ShowVanillaTable = true;
     static bool EnableInputs = false;
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
@@ -335,20 +413,15 @@ public static class TimingPatches
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
     [HarmonyPatch(nameof(ImGuiProfiler.Draw))]
-    [HarmonyPrefix]
-    private static bool ImGuiProfilerDraw()
+    [HarmonyPostfix]
+    private static void ImGuiProfilerDraw()
     {
         ImGui.Begin("Stationeers Profiler");
-        
-        ImGui.Checkbox("Show Vanilla Table", ref ShowVanillaTable);
-        ImGui.SameLine();
-        ImGui.TextUnformatted("    ");
-        ImGui.SameLine();
-        
-        if(EnableInputs)
+
+        if (EnableInputs)
             CursorManager.SetCursor(false);
 
-        if (ImGui.Checkbox("Capture inputs", ref EnableInputs) )
+        if (ImGui.Checkbox("Capture inputs", ref EnableInputs))
         {
             if (EnableInputs)
             {
@@ -360,11 +433,10 @@ public static class TimingPatches
                 KeyManager.RemoveInputState("stationeersprofiler");
             }
         }
-        
-        
+
         var FunctionSets = StationeersProfilingPlugin.FunctionSets;
-        for(int i =0; i < FunctionSets.Count; i++)
-            FunctionSets[i].DrawConfig(i+1);
+        for (int i = 0; i < FunctionSets.Count; i++)
+            FunctionSets[i].DrawConfig(i + 1);
         ImGui.End();
 
         ImGui.Begin("ImGuiProfilerWindow", (ImGuiWindowFlags)799685);
@@ -372,68 +444,32 @@ public static class TimingPatches
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(10f, 0f));
         ImGui.PushStyleColor(ImGuiCol.TableRowBg, ImGuiProfiler._colorRowBg);
         ImGui.PushStyleColor(ImGuiCol.TableRowBgAlt, ImGuiProfiler._colorRowBgAlt);
-        if (ImGui.BeginTable("ImGuiProfilerTable", 6, (ImGuiTableFlags)10320))
-        {
-            ImGui.TableSetupColumn("Custom timings (accumulated per thread)", 500f);
-            ImGui.TableSetupColumn("Calls", 100f);
-            ImGui.TableSetupColumn("Avg us", 100f);
-            ImGui.TableSetupColumn("Max us", 100f);
-            ImGui.TableSetupColumn("Total ms", 100f);
-            ImGui.TableSetupColumn("Exceptions", 150f);
-            ImGui.TableHeadersRow();
-
-            var snapshot = Timing.LastSnapshot;
-            for (int i = 0; i < snapshot.Count; i++)
-            {
-                var s = snapshot[i];
-                var avgUs = 1000.0f * (float)(s.Calls > 0 ? (s.TotalMilliseconds / s.Calls) : 0.0);
-                ImGui.TableNextRow();
-                ImGui.TableSetColumnIndex(0);
-                ImGui.TextUnformatted(s.MethodName);
-                ImGui.TableSetColumnIndex(1);
-                ImGuiProfiler.DrawValue((float)s.Calls, "0");
-                ImGui.TableSetColumnIndex(2);
-                ImGuiProfiler.DrawValue(avgUs, "0");
-                ImGui.TableSetColumnIndex(3);
-                ImGuiProfiler.DrawValue(s.MaxMicroseconds, "0");
-                ImGui.TableSetColumnIndex(4);
-                ImGuiProfiler.DrawValue((float)s.TotalMilliseconds, "0");
-                ImGui.TableSetColumnIndex(5);
-                ImGuiProfiler.DrawValue((float)s.Exceptions, "0");
-            }
-        }
-
-        ImGui.EndTable();
         ImGui.NewLine();
 
-        if (ShowVanillaTable)
-        {
-            if (ImGui.BeginTable("ImGuiProfilerTable", 3, (ImGuiTableFlags)10320))
-            {
-                ImGui.TableSetupColumn("Name");
-                ImGui.TableSetupColumn("Cur ms", 100f);
-                ImGui.TableSetupColumn("Avg ms", 100f);
-                ImGui.TableHeadersRow();
-
-                foreach (KeyValuePair<string, DebugLine> debugLine in ImGuiProfiler._debugLines)
-                {
-                    ImGui.TableNextRow();
-                    ImGui.TableSetColumnIndex(0);
-                    ImGui.TextUnformatted(debugLine.Key);
-                    ImGui.TableSetColumnIndex(1);
-                    ImGuiProfiler.DrawValue(debugLine.Value.GetCurrent(), "0.00");
-                    ImGui.TableSetColumnIndex(2);
-                    ImGuiProfiler.DrawValue(debugLine.Value.GetAverage(), "0.000");
-                }
-
-                ImGui.EndTable();
-            }
-            ImGui.PopStyleVar();
-            ImGui.PopStyleColor();
-            ImGui.PopStyleColor();
-            ImGui.End();
-        }
         StationeersProfilingPlugin.Instance.CheckConfig();
-        return false;
+    }
+
+    // Append a custom tab to the ImGuiProfiler window
+    [HarmonyPatch(typeof(ImGuiProfiler), "Draw")]
+    [HarmonyTranspiler]
+    private static IEnumerable<CodeInstruction> ImGuiProfiler_Draw_EndTabBar_Transpiler(IEnumerable<CodeInstruction> instructions)
+    {
+        var codes = new List<CodeInstruction>(instructions);
+
+        var endTabBar = AccessTools.Method(typeof(ImGui), nameof(ImGui.EndTabBar)) ?? throw new MissingMethodException("Could not find ImGuiNET.ImGui.EndTabBar()");
+        var myTab = AccessTools.Method(typeof(Timing), nameof(Timing.DrawTimings)) ?? throw new MissingMethodException("Could not find MyClass.MyTab()");
+        for (int i = 0; i < codes.Count; i++)
+        {
+            // When we see the call to ImGui.EndTabBar(), inject our call right before it.
+            if ((codes[i].opcode == OpCodes.Call || codes[i].opcode == OpCodes.Callvirt) &&
+                codes[i].operand is MethodInfo mi &&
+                mi == endTabBar)
+            {
+                codes.Insert(i, new CodeInstruction(OpCodes.Call, myTab));
+                i++; // skip over the inserted instruction
+                break; // only patch the first EndTabBar occurrence
+            }
+        }
+        return codes;
     }
 }
