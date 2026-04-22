@@ -120,6 +120,11 @@ public class StationeersProfilingPlugin : BaseUnityPlugin
     public static StationeersProfilingPlugin Instance = null;
 
     public static List<FunctionSet> FunctionSets;
+    
+    public static void Log(string message)
+    {
+        Instance.Logger.LogInfo(message);
+    }
 
     private bool HasConfigChanged = false;
     private long HasConfigChangedTick = 0;
@@ -271,6 +276,7 @@ public class StationeersProfilingPlugin : BaseUnityPlugin
 
             _harmony = new Harmony(PluginGuid);
             _harmony.PatchAll();
+            // AtmosphericsManager_Patch.Init();
 
             BindAllConfigs();
             Init();
@@ -285,6 +291,7 @@ public class StationeersProfilingPlugin : BaseUnityPlugin
     {
         try
         {
+            // PerformancePatches.DisableNow();
             this.Logger.LogInfo($"OnDestroy ${PluginName} {PluginLongVersion}");
             // CutScenePatches.CleanupPrefabs();
             if (_harmony == null)

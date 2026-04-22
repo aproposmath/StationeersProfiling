@@ -161,11 +161,13 @@ public static class Timing
             var s = Stats[id];
             if (s == null)
                 continue;
+                
+            s.Accumulate();
 
-            var calls = Volatile.Read(ref s.Calls);
-            var totalTicks = Volatile.Read(ref s.TotalTicks);
-            var maxTicks = Volatile.Read(ref s.MaxTicks);
-            var exceptions = Volatile.Read(ref s.NumExceptions);
+            var calls = Volatile.Read(ref s.Calls[0]);
+            var totalTicks = Volatile.Read(ref s.TotalTicks[0]);
+            var maxTicks = Volatile.Read(ref s.MaxTicks[0]);
+            var exceptions = Volatile.Read(ref s.NumExceptions[0]);
 
             list.Add(new StatSnapshot(
                 methodName: MethodNames[id],
@@ -284,32 +286,61 @@ public static class Timing
 
     private sealed class Stat
     {
-        public long TotalTicks;
-        public long MaxTicks;
-        public int Calls;
-        public int NumExceptions;
+        const int N = 13;
+        public long[] TotalTicks = new long[N];
+        public long[] MaxTicks = new long[N];
+        public int[] Calls = new int[N];
+        public int[] NumExceptions = new int[N];
 
         public void Add(long deltaTicks, bool hasException)
         {
-            Interlocked.Increment(ref Calls);
-            Interlocked.Add(ref TotalTicks, deltaTicks);
+            var threadId = Thread.CurrentThread.ManagedThreadId % N;
+            Interlocked.Increment(ref Calls[threadId]);
+            Interlocked.Add(ref TotalTicks[threadId], deltaTicks);
             if (hasException)
-                Interlocked.Increment(ref NumExceptions);
+                Interlocked.Increment(ref NumExceptions[threadId]);
 
             long current;
-            while (deltaTicks > (current = Volatile.Read(ref MaxTicks)))
+            while (deltaTicks > (current = Volatile.Read(ref MaxTicks[threadId])))
             {
-                if (Interlocked.CompareExchange(ref MaxTicks, deltaTicks, current) == current)
+                if (Interlocked.CompareExchange(ref MaxTicks[threadId], deltaTicks, current) == current)
                     break;
             }
         }
 
         public void Reset()
         {
-            Volatile.Write(ref Calls, 0);
-            Volatile.Write(ref TotalTicks, 0);
-            Volatile.Write(ref MaxTicks, 0);
-            Volatile.Write(ref NumExceptions, 0);
+            for (int i = 0; i < N; i++)
+            {
+                Volatile.Write(ref Calls[i], 0);
+                Volatile.Write(ref TotalTicks[i], 0);
+                Volatile.Write(ref MaxTicks[i], 0);
+                Volatile.Write(ref NumExceptions[i], 0);
+            }
+        }
+        
+        public void Accumulate()
+        {
+            long totalTicks = 0;
+            long maxTicks = 0;
+            int calls = 0;
+            int exceptions = 0;
+
+            for (int i = 0; i < N; i++)
+            {
+                calls += Volatile.Read(ref Calls[i]);
+                totalTicks += Volatile.Read(ref TotalTicks[i]);
+                exceptions += Volatile.Read(ref NumExceptions[i]);
+                var threadMax = Volatile.Read(ref MaxTicks[i]);
+                if (threadMax > maxTicks)
+                    maxTicks = threadMax;
+            }
+
+            Volatile.Write(ref Calls[0], calls);
+            Volatile.Write(ref TotalTicks[0], totalTicks);
+            Volatile.Write(ref MaxTicks[0], maxTicks);
+            Volatile.Write(ref NumExceptions[0], exceptions);
+            
         }
     }
 
@@ -372,11 +403,11 @@ public static class Timing
                 ImGui.TableSetColumnIndex(1);
                 ImGuiProfiler.DrawValue(s.Calls, "0");
                 ImGui.TableSetColumnIndex(2);
-                ImGuiProfiler.DrawValue(s.TotalMilliseconds, "0.0");
+                ImGuiProfiler.DrawValue(s.AvgMicroseconds, "0.0");
                 ImGui.TableSetColumnIndex(3);
-                ImGuiProfiler.DrawValue(s.AvgMicroseconds, "0");
-                ImGui.TableSetColumnIndex(4);
                 ImGuiProfiler.DrawValue(s.MaxMicroseconds, "0");
+                ImGui.TableSetColumnIndex(4);
+                ImGuiProfiler.DrawValue(s.TotalMilliseconds, "0.0");
                 ImGui.TableSetColumnIndex(5);
                 ImGuiProfiler.DrawValue(s.Exceptions, "0");
             }
@@ -396,19 +427,36 @@ public static class TimingPatches
     [HarmonyPatch(typeof(ImGuiProfiler))]
     [HarmonyPatch(nameof(ImGuiProfiler.Begin))]
     [HarmonyPrefix]
-    static void BeginPrefix()
+    static void BeginPrefix(string groupKey)
     {
         if (!ImGuiProfiler.Enabled)
             return;
+        if (groupKey != "GameTick")
+            return;
+            
+        // var findMilliseconds = AtmosphericsManager_Patch.FindTicksTotal / (float)Stopwatch.Frequency * 1000f;
+        // StationeersProfilingPlugin.Log($"FindMilliseconds={findMilliseconds:F3} FindCount={AtmosphericsManager_Patch.FindCount}, RegisterCount={AtmosphericsManager_Patch.RegisterCount}, DeregisterCount={AtmosphericsManager_Patch.DeregisterCount}");
+        // AtmosphericsManager_Patch.FindCount = 0;
+        // AtmosphericsManager_Patch.RegisterCount = 0;
+        // AtmosphericsManager_Patch.DeregisterCount = 0;
+        // AtmosphericsManager_Patch.FindTicksTotal = 0;
+        
+        
+        
+
         Timing.Start();
+        // PerformancePatches.BeginTick();
     }
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
     [HarmonyPatch(nameof(ImGuiProfiler.End))]
     [HarmonyPrefix]
-    static void EndPrefix()
+    static void EndPrefix(string groupKey)
     {
+        if(groupKey != "GameTick")
+            return;
         Timing.Stop();
+        // PerformancePatches.EndTick();
     }
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
@@ -417,7 +465,7 @@ public static class TimingPatches
     private static void ImGuiProfilerDraw()
     {
         ImGui.Begin("Stationeers Profiler");
-
+        
         if (EnableInputs)
             CursorManager.SetCursor(false);
 
@@ -433,6 +481,10 @@ public static class TimingPatches
                 KeyManager.RemoveInputState("stationeersprofiler");
             }
         }
+        // ImGui.SameLine();
+        // bool EnablePerformancePatches = PerformancePatches.Enabled;
+        // if (ImGui.Checkbox("Faster atmosphere lookup", ref EnablePerformancePatches) && EnablePerformancePatches != PerformancePatches.Enabled)
+        //     PerformancePatches.SetEnabled(EnablePerformancePatches);
 
         var FunctionSets = StationeersProfilingPlugin.FunctionSets;
         for (int i = 0; i < FunctionSets.Count; i++)
