@@ -281,9 +281,6 @@ public static class Timing
         stat?.Add(delta, hasException);
     }
 
-    private static double TicksToMilliseconds(long stopwatchTicks)
-        => stopwatchTicks * 1000.0 / Stopwatch.Frequency;
-
     private sealed class Stat
     {
         const int N = 13;
@@ -434,18 +431,7 @@ public static class TimingPatches
         if (groupKey != "GameTick")
             return;
             
-        // var findMilliseconds = AtmosphericsManager_Patch.FindTicksTotal / (float)Stopwatch.Frequency * 1000f;
-        // StationeersProfilingPlugin.Log($"FindMilliseconds={findMilliseconds:F3} FindCount={AtmosphericsManager_Patch.FindCount}, RegisterCount={AtmosphericsManager_Patch.RegisterCount}, DeregisterCount={AtmosphericsManager_Patch.DeregisterCount}");
-        // AtmosphericsManager_Patch.FindCount = 0;
-        // AtmosphericsManager_Patch.RegisterCount = 0;
-        // AtmosphericsManager_Patch.DeregisterCount = 0;
-        // AtmosphericsManager_Patch.FindTicksTotal = 0;
-        
-        
-        
-
         Timing.Start();
-        // PerformancePatches.BeginTick();
     }
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
