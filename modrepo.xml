@@ -3,11 +3,11 @@
   >
   <ModVersion
       ModID="aproposmath-stationeers-profiling"
-      Version="0.0.2.2-dev"
+      Version="0.0.2.3-dev"
       Name="StationeersProfiling"
       Author="aproposmath"
       Url="https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip"
-      Digest="sha256:544ea6703319b9c99cdc8774e0d11a39bcf916c66e0806b6d0b7208271e6991f"
+      Digest="sha256:fe1cad5d97a6c3c4e4f437d9936c03e40867ca917c31cee782840e367954910e"
     >
     <Branch
         Value="main"
