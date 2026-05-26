@@ -426,9 +426,7 @@ public static class TimingPatches
     [HarmonyPrefix]
     static void BeginPrefix(string groupKey)
     {
-        if (!ImGuiProfiler.Enabled)
-            return;
-        if (groupKey != "GameTick")
+        if (groupKey != "GameTick" || !ImGuiProfiler.Enabled)
             return;
             
         Timing.Start();
@@ -439,10 +437,24 @@ public static class TimingPatches
     [HarmonyPrefix]
     static void EndPrefix(string groupKey)
     {
-        if(groupKey != "GameTick")
+        if (groupKey != "GameTick" || !ImGuiProfiler.Enabled)
             return;
+            
+        var group = ImGuiProfiler.GetGroup(groupKey);
+        group.Update("Total GameTick");
+        try
+        {
+            var line = group.Lines["Total GameTick"];
+            var newTime = group._stopwatch.ElapsedMilliseconds;
+            line._currentTime = newTime;
+            line._times[(line._currentIndex + 4)%5] = newTime;
+            ImGuiProfilerPatches.UpdateTimes();
+        }
+        catch (Exception ex)
+        {
+            StationeersProfilingPlugin.Log($"Error updating profiler timings: {ex}");
+        }
         Timing.Stop();
-        // PerformancePatches.EndTick();
     }
 
     [HarmonyPatch(typeof(ImGuiProfiler))]
