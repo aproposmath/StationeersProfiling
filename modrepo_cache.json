@@ -1,34 +1,4 @@
 {
-    "sha256:38a5836357d7f0329b4512a37131de6bf0574ab8610d5f004e72a3118d0314fd": {
-        "author": "aproposmath",
-        "branch": [
-            "main"
-        ],
-        "depends_on": [],
-        "digest": "sha256:38a5836357d7f0329b4512a37131de6bf0574ab8610d5f004e72a3118d0314fd",
-        "id": "aproposmath-stationeers-profiling",
-        "name": "StationeersProfiler",
-        "tag": [
-            "Modding",
-            "Code"
-        ],
-        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiler-main.zip",
-        "version": "0.0.2.1-dev"
-    },
-    "sha256:4493e006ae7818ce1858646ba75434d6addb8c4fa3302109a6698bddfb053a67": {
-        "author": "aproposmath",
-        "branch": [],
-        "depends_on": [],
-        "digest": "sha256:4493e006ae7818ce1858646ba75434d6addb8c4fa3302109a6698bddfb053a67",
-        "id": "aproposmath-stationeers-profiling",
-        "name": "StationeersProfiler",
-        "tag": [
-            "Modding",
-            "Code"
-        ],
-        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
-        "version": "0.0.1"
-    },
     "sha256:4ac9c05beea67920ff4b4868ad916ad2b1c2191359d4124d162c5767ba89a317": {
         "author": "aproposmath",
         "branch": [],
@@ -42,5 +12,21 @@
         ],
         "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/v0.0.2/Main-v0.0.2.zip",
         "version": "0.0.2"
+    },
+    "sha256:544ea6703319b9c99cdc8774e0d11a39bcf916c66e0806b6d0b7208271e6991f": {
+        "author": "aproposmath",
+        "branch": [
+            "main"
+        ],
+        "depends_on": [],
+        "digest": "sha256:544ea6703319b9c99cdc8774e0d11a39bcf916c66e0806b6d0b7208271e6991f",
+        "id": "aproposmath-stationeers-profiling",
+        "name": "StationeersProfiling",
+        "tag": [
+            "Modding",
+            "Code"
+        ],
+        "url": "https://github.com/aproposmath/StationeersProfiling/releases/download/main/StationeersProfiling-main.zip",
+        "version": "0.0.2.2-dev"
     }
 }
