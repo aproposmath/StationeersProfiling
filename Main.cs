@@ -288,6 +288,7 @@ public class StationeersProfilingPlugin : BaseUnityPlugin
 
     private void OnDestroy()
     {
+        #if DEBUG
         try
         {
             this.Logger.LogInfo($"OnDestroy ${PluginName} {PluginLongVersion}");
@@ -301,6 +302,7 @@ public class StationeersProfilingPlugin : BaseUnityPlugin
         {
 
         }
+        #endif
     }
 
 
