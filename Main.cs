@@ -112,15 +112,15 @@ public class FunctionSet
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
 public class StationeersProfilingPlugin : BaseUnityPlugin
 {
-    public const string PluginGuid = "aproposmath-stationeers-profiling";
-    public const string PluginName = ThisAssembly.AssemblyName;
-    public const string PluginVersion = ThisAssembly.AssemblyVersion;
-    public const string PluginLongVersion = ThisAssembly.AssemblyInformationalVersion;
+    public const string PluginGuid = ThisModInfo.ModID;
+    public const string PluginName = ThisModInfo.AssemblyName;
+    public const string PluginVersion = ThisModInfo.Version;
+    public const string PluginLongVersion = ThisModInfo.VersionLong;
     public static Harmony _harmony;
     public static StationeersProfilingPlugin Instance = null;
 
     public static List<FunctionSet> FunctionSets;
-    
+
     public static void Log(string message)
     {
         Instance.Logger.LogInfo(message);
