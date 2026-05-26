@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- MANDATORY: Change this to your mod id. This will be used as Bepinex plugin GUID and as ModID in About.xml -->
     <ModID>aproposmath-stationeers-profiling</ModID>
-    <AssemblyName>StationeersProfiler</AssemblyName>
+    <AssemblyName>StationeersProfiling</AssemblyName>
     <Description>Mod for showing timings of game code functions</Description>
     <!-- Optional: Set this if it's not found automatically or you want to force a specific Stationeers directory -->
     <StationeersDirectory/>
