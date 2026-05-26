@@ -1,26 +1,15 @@
 <?xml version="1.0"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <!-- Adapt this path if Stationeers is not found automatically -->
-    <StationeersDllDir>C:\Program Files (x86)\Steam\steamapps\common\Stationeers\rocketstation_Data\Managed</StationeersDllDir>
-    <!-- Default Steam installation paths for Windows -->
-    <DllSubDirW>steamapps\common\Stationeers\rocketstation_Data\Managed</DllSubDirW>
-    <StationeersDllDir Condition="Exists('C:\Program Files (x86)\Steam\$(DllSubDirW)')">C:\Program Files (x86)\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('C:\Program Files\Steam\$(DllSubDirW)')">C:\Program Files\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('D:\Program Files (x86)\Steam\$(DllSubDirW)')">D:\Program Files (x86)\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('D:\Program Files\Steam\$(DllSubDirW)')">D:\Program Files\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('C:\Steam\$(DllSubDirW)')">C:\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('D:\Steam\$(DllSubDirW)')">C:\Steam\$(DllSubDirW)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('E:\Steam\$(DllSubDirW)')">C:\Steam\$(DllSubDirW)</StationeersDllDir>
-    <!-- Check for Linux Steam paths using environment variables or known directories -->
-    <DllSubDirL>steamapps/common/Stationeers/rocketstation_Data/Managed</DllSubDirL>
-    <StationeersDllDir Condition="Exists('$(HOME)/.steam/steam/$(DllSubDirL)')">$(HOME)/.steam/steam/$(DllSubDirL)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('$(HOME)/Steam/$(DllSubDirL)')">$(HOME)/Steam/$(DllSubDirL)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('$(STEAMROOT)/$(DllSubDirL)')">$(STEAMROOT)/$(DllSubDirL)</StationeersDllDir>
-    <StationeersDllDir Condition="Exists('$(STATIONEERS_DLL_DIR)')">$(STATIONEERS_DLL_DIR)</StationeersDllDir>
+    <!-- MANDATORY: Change this to your mod id. This will be used as Bepinex plugin GUID and as ModID in About.xml -->
+    <ModID>aproposmath-stationeers-profiling</ModID>
+    <AssemblyName>StationeersProfiler</AssemblyName>
+    <Description>Mod for showing timings of game code functions</Description>
+    <!-- Optional: Set this if it's not found automatically or you want to force a specific Stationeers directory -->
+    <StationeersDirectory/>
+    <Dependencies>
+      <!-- Put links to .zip files here, they will be downloaded and extracted to /Template/dependencies before build on Github actions -->
+      <!-- <Url>https://some.url/to/some/file.zip</Url> -->
+    </Dependencies>
   </PropertyGroup>
-  <Target Name="PrintPaths" BeforeTargets="Build">
-    <Message Importance="High" Text="StationeersDllDir: $(StationeersDllDir)"/>
-    <Error Condition="!Exists('$(StationeersDllDir)/Assembly-CSharp.dll')" Text="Could not find Stationeers automatically, set it manually in Main.props Line 4, or set STATIONEERS_DLL_DIR environment variable"/>
-  </Target>
 </Project>
